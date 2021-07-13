@@ -25,7 +25,6 @@ V1.0
 //Device structure, should be initialized to NULL
 lms_device_t* device = NULL;
 
-//Use this function to raise error and close device
 int error(char *string)
 {
     printf("--------------------------------------------------\n"
@@ -35,6 +34,166 @@ int error(char *string)
         LMS_Close(device);
     exit(-1);
 }
+
+
+class Lime_SDR_mini_Rx
+{
+    public:
+        lms_device_t* device;
+        lms_stream_t streamId;
+
+    private:
+        Lime_SDR_mini_Rx()
+        {
+            device = NULL;
+        };
+        template <class Disp_Meas_Settings>
+        void setup_SDR(Disp_Meas_Settings Settings_In)
+        {
+            //open the first device
+            lms_info_str_t list[8];
+            if (LMS_Open(&device, list[0], NULL))
+                error("Alio");
+
+            if (LMS_Init(device) != 0)
+                error("Alio");
+
+            //Enable RX channel
+            //Channels are numbered starting at 0
+            if (LMS_EnableChannel(device, LMS_CH_RX, 0, true) != 0)
+                error("Alio");
+
+            //Set center frequency
+            if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, Settings_In.Center_Freq) != 0)
+                error("Alio");
+
+            //Set sample rate, ask to use 2x oversampling in RF
+            //This sets sampling rate for all channels
+            if (LMS_SetSampleRate(device, Settings_In.Sample_Rate, 1) != 0)
+                error("Alio");
+
+            //Set Lowpass Filter Bandwidth
+            LMS_SetLPFBW(device, LMS_CH_RX, 0, Settings_In.Sample_Rate*2);
+
+            LMS_SetGaindB(device, LMS_CH_RX, 0, Settings_In.Gain);
+        };
+        void Setup_Stream()
+        {
+            streamId.channel = 0;               //channel number
+            streamId.fifoSize = 1024 * 1024;    //fifo size in samples
+            streamId.throughputVsLatency = 1.0; //optimize for max throughput
+            streamId.isTx = false;              //RX channel
+            streamId.dataFmt = lms_stream_t::LMS_FMT_I12;     //12-bit integers //lms_stream_t::
+
+            //Setup Stream
+            if (LMS_SetupStream(device, &streamId) != 0)
+                error("Alio");
+        };
+        void Start_Stream()
+        {
+            //Start streaming
+            LMS_StartStream(&streamId);
+        };
+        void Stop_Stream()
+        {
+            //Stop streaming
+            LMS_StopStream(&streamId);
+        };
+        void Close_Stream()
+        {
+            LMS_DestroyStream(device, &streamId);
+        };
+        ~Lime_SDR_mini_Rx()
+        {
+            LMS_Close(device);
+        };
+};
+
+class Disp_Meas_Settings
+{
+    protected:
+        float_type Disp_CenterFreq;
+        float_type Disp_ResBw;
+        float_type Sweep_Time;
+        double Gain;
+        double LPBWF_BW;
+        double Ref_Amp;
+        float_type Center_Freq;
+        float_type Sample_Rate;
+
+    public:
+        Disp_Meas_Settings(float_type Center_Freq_In, float_type Sample_Rate_In, double Gain_In, double LPBWF_BW_In, double Ref_Amp_In)
+        {
+            Center_Freq = Center_Freq_In - Sample_Rate_In/4;
+            Sample_Rate = Sample_Rate_In;
+            Gain = Gain_In;
+            LPBWF_BW = LPBWF_BW_In;
+            Ref_Amp = Ref_Amp_In;
+        }
+
+        void Change_RF_Settings(float_type Center_Freq_In, float_type Sample_Rate_In)
+        {
+            Center_Freq = Center_Freq_In - Sample_Rate_In/4;
+            Sample_Rate = Sample_Rate_In;
+        }
+
+        Disp_Meas_Settings();
+};
+
+class FFT_Settings
+{
+    protected:
+        int DFTlength;
+        double *PSD_1Hz;
+        double *FREQ;
+        double *tempArr;
+        fftw_complex *in;
+        fftw_complex *out;
+        fftw_plan p;
+
+    public:
+        FFT_Settings(int DFTlengthIn, double gainIn)
+        {
+            DFTlength = DFTlengthIn;
+            PSD_1Hz = new double [DFTlength/2];
+            FREQ = new double [DFTlength/2];
+            in = new fftw_complex [DFTlength];
+            out = new fftw_complex [DFTlength];
+            p = fftw_plan_dft_1d(DFTlength, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+        };
+        void Execute_FFTW()
+        {
+            fftw_execute(p);
+        };
+        void Change_FFT_Settings(int DFTlengthIn)
+        {
+            //Free old memory
+            free(PSD_1Hz);
+            free(FREQ);
+            fftw_free(in);
+            fftw_free(out);
+            fftw_destroy_plan(p);
+
+            // Set new values
+            DFTlength = DFTlengthIn;
+            PSD_1Hz = new double [DFTlength/2];
+            FREQ = new double [DFTlength/2];
+            in = new fftw_complex [DFTlength];
+            out = new fftw_complex [DFTlength];
+            p = fftw_plan_dft_1d(DFTlength, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+        };
+
+
+        ~FFT_Settings()
+        {
+            free(PSD_1Hz);
+            free(FREQ);
+            fftw_free(in);
+            fftw_free(out);
+            fftw_destroy_plan(p);
+        };
+};
+
 /*
 int loadConfig()
 {
@@ -80,70 +239,6 @@ int main(int argc, char** argv)
     double PSD_1Hz[DFTlength/2];          //Array for saving power values
     double FREQ[DFTlength/2];         //Array for frequency power values
     double tempArr[DFTlength/2];
-    fftw_plan p;
-
-    p = fftw_plan_dft_1d(DFTlength, in, out, FFTW_FORWARD, FFTW_ESTIMATE);      //Create FFT Plan
-
-    //Find devices
-    int n;
-    double temperature, *tempe;
-    tempe = &temperature;
-
-    unsigned gain, *gainPtr;
-    gainPtr = &gain;
-
-    lms_info_str_t list[8];                 //should be large enough to hold all detected devices
-    if ((n = LMS_GetDeviceList(list)) < 0)  //NULL can be passed to only get number of devices
-        error("Alio");
-
-    printf("Devices found: %i \n", n);      //print number of devices
-    if (n < 1)
-        return -1;
-
-    //open the first device
-    if (LMS_Open(&device, list[0], NULL))
-        error("Alio");
-
-    //Initialize device with default configuration
-    //Do not use if you want to keep existing configuration
-    //Use LMS_LoadConfig(device, "/path/to/file.ini") to load config from INI
-
-    if (LMS_Init(device) != 0)
-      error("Alio");
-
-
-    //Enable RX channel
-    //Channels are numbered starting at 0
-    if (LMS_EnableChannel(device, LMS_CH_RX, 0, true) != 0)
-        error("Alio");
-
-    //Set center frequency
-    if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, centerFreq) != 0)
-        error("Alio");
-
-    //Set sample rate, ask to use 2x oversampling in RF
-    //This sets sampling rate for all channels
-    if (LMS_SetSampleRate(device, sampleRate, 1) != 0)
-        error("Alio");
-
-    //Set Lowpass Filter Bandwidth
-    LMS_SetLPFBW(device, LMS_CH_RX, 0, sampleRate*2);
-
-    //Get default gain value
-    LMS_GetGaindB(device, LMS_CH_RX, 0, gainPtr);
-
-    //Display default gain
-    printf("current Gain: %i\n", *gainPtr);
-
-    //Set Gain to 30dB
-    LMS_SetGaindB(device, LMS_CH_RX, 0, 20);
-
-    lms_stream_t streamId;              //stream structure
-    streamId.channel = 0;               //channel number
-    streamId.fifoSize = 1024 * 1024;    //fifo size in samples
-    streamId.throughputVsLatency = 1.0; //optimize for max throughput
-    streamId.isTx = false;              //RX channel
-    streamId.dataFmt = LMS_FMT_I12;     //12-bit integers //lms_stream_t::
 
     //Setup Stream
     if (LMS_SetupStream(device, &streamId) != 0)

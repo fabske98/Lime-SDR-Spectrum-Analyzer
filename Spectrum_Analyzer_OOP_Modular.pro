@@ -4,7 +4,7 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 SOURCES += \
-        main.c
+        main.cpp
 INCLUDEPATH += /usr/include/c++/9\
                /home/ungare/Documents/Programs/LimeSuite/src/protocols
 
