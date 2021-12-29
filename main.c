@@ -35,35 +35,6 @@ int error(char *string)
         LMS_Close(device);
     exit(-1);
 }
-/*
-int loadConfig()
-{
-    FILE *fid;
-    fid = fopen("config.csv", "r");
-
-    if(fid == NULL)
-    {
-        error("config file not found");
-    }
-    else
-    {
-        fclose(fid);
-        CsvParser *csvparser = CsvParser_new("config.csv", ",", 0);
-        CsvRow *row;
-        while ((row = CsvParser_getRow(csvparser)) )
-        {
-            printf("NEW LINE:\n");
-            const char **rowFields = CsvParser_getFields(row);
-            for (int i = 0 ; i < CsvParser_getNumFields(row) ; i++) {
-                printf("FIELD: %s\n", rowFields[i]);
-            }
-            CsvParser_destroy_row(row);
-        }
-        CsvParser_destroy(csvparser);
-        return 0;
-    }
-}
-*/
 
 
 //Main Function
@@ -72,7 +43,7 @@ int main(int argc, char** argv)
     //Initialize variables to be used later on
     gnuplot_ctrl *gnuplotHandle;
     int DFTlength = 8192;           //DFT Length
-    float_type centerFreq = 433.9e6;  //Center Frequency
+    float_type centerFreq = 2000e6;  //Center Frequency
     fftw_complex in[DFTlength];     //Input to fftw
     fftw_complex out[DFTlength];    //Output of fftw
     float_type sampleRate = 1e6;    //Bandwidth
@@ -80,6 +51,8 @@ int main(int argc, char** argv)
     double PSD_1Hz[DFTlength/2];          //Array for saving power values
     double FREQ[DFTlength/2];         //Array for frequency power values
     double tempArr[DFTlength/2];
+    unsigned gain = 15, *gainPtr;
+    gainPtr = &gain;
     fftw_plan p;
 
     p = fftw_plan_dft_1d(DFTlength, in, out, FFTW_FORWARD, FFTW_ESTIMATE);      //Create FFT Plan
@@ -89,12 +62,9 @@ int main(int argc, char** argv)
     double temperature, *tempe;
     tempe = &temperature;
 
-    unsigned gain, *gainPtr;
-    gainPtr = &gain;
-
     lms_info_str_t list[8];                 //should be large enough to hold all detected devices
     if ((n = LMS_GetDeviceList(list)) < 0)  //NULL can be passed to only get number of devices
-        error("Alio");
+        error("No device found");
 
     printf("Devices found: %i \n", n);      //print number of devices
     if (n < 1)
@@ -102,41 +72,36 @@ int main(int argc, char** argv)
 
     //open the first device
     if (LMS_Open(&device, list[0], NULL))
-        error("Alio");
+        error("Device could not be opened");
 
     //Initialize device with default configuration
     //Do not use if you want to keep existing configuration
     //Use LMS_LoadConfig(device, "/path/to/file.ini") to load config from INI
 
     if (LMS_Init(device) != 0)
-      error("Alio");
+      error("Device could not be initialized");
 
 
     //Enable RX channel
     //Channels are numbered starting at 0
     if (LMS_EnableChannel(device, LMS_CH_RX, 0, true) != 0)
-        error("Alio");
+        error("Channel enable failed");
 
     //Set center frequency
     if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, centerFreq) != 0)
-        error("Alio");
+        error("LO Freq setting failed");
 
     //Set sample rate, ask to use 2x oversampling in RF
     //This sets sampling rate for all channels
     if (LMS_SetSampleRate(device, sampleRate, 1) != 0)
-        error("Alio");
+        error("Sample Rate setting failed");
 
     //Set Lowpass Filter Bandwidth
     LMS_SetLPFBW(device, LMS_CH_RX, 0, sampleRate*2);
 
-    //Get default gain value
-    LMS_GetGaindB(device, LMS_CH_RX, 0, gainPtr);
 
-    //Display default gain
-    printf("current Gain: %i\n", *gainPtr);
-
-    //Set Gain to 30dB
-    LMS_SetGaindB(device, LMS_CH_RX, 0, 20);
+    //Set Gain to 0dB
+    LMS_SetGaindB(device, LMS_CH_RX, 0, gain);
 
     lms_stream_t streamId;              //stream structure
     streamId.channel = 0;               //channel number
@@ -147,7 +112,7 @@ int main(int argc, char** argv)
 
     //Setup Stream
     if (LMS_SetupStream(device, &streamId) != 0)
-        error("Alio");
+        error("Setting up stream failed");
 
     //Initialize data buffers
     const int sampleCnt = DFTlength; //complex samples per buffer
@@ -162,7 +127,7 @@ int main(int argc, char** argv)
     //Initialize gnuplot
     gnuplotHandle = gnuplot_init();
     gnuplot_setstyle(gnuplotHandle, "lines");
-    gnuplot_cmd(gnuplotHandle, "set yrange [%i:%f]", -150, -30);
+    gnuplot_cmd(gnuplotHandle, "set yrange [%i:%f]", -150, 0);
 
     //Get current chip temperature
     LMS_GetChipTemperature(device, 0, tempe);
