@@ -10,74 +10,97 @@ V1.0
 #include "lime/LimeSuite.h"     // Required to drive LimeSDR
 #include <stdlib.h>
 #include <stdio.h>
-#include <gnuplot_i.h>          // Required for Plotting
+#include <gnuplot_i.hpp>          // Required for Plotting
 #include <time.h>
 #include <math.h>
 #include <fftw3.h>              // Required for DFT and FFT
 #include <csvparser.h>
+#include <vector>
+#include <Header.h>
+#include <unistd.h>
 #ifdef USE_GNU_PLOT
 #include "gnuPlotPipe.h"
 #endif
-#define CONFIG_UPDATE_TIME 1000
 
-
-
-//Device structure, should be initialized to NULL
-lms_device_t* device = NULL;
-
-int error(char *string)
-{
-    printf("--------------------------------------------------\n"
-           "Error: %s\n"
-           "--------------------------------------------------", string);
-    if (device != NULL)
-        LMS_Close(device);
-    exit(-1);
-}
-
+#define MAX_TRACE 1
 
 class Lime_SDR_mini_Rx
 {
     public:
         lms_device_t* device;
         lms_stream_t streamId;
-
-    private:
         Lime_SDR_mini_Rx()
         {
             device = NULL;
         };
-        template <class Disp_Meas_Settings>
-        void setup_SDR(Disp_Meas_Settings Settings_In)
+        ~Lime_SDR_mini_Rx()
+        {
+            Close_Stream();
+            LMS_Close(device);
+        };
+
+
+        int Setup_SDR(float_type centerFreq, float_type sampleRate, unsigned gain)
         {
             //open the first device
             lms_info_str_t list[8];
+            int n;
+
+            if ((n = LMS_GetDeviceList(list)) < 0)  //NULL can be passed to only get number of devices
+                error("No devices found", device);
+
             if (LMS_Open(&device, list[0], NULL))
-                error("Alio");
+                error("Device could not be opened", device);
 
             if (LMS_Init(device) != 0)
-                error("Alio");
+                error("Device could not be initialized", device);
 
             //Enable RX channel
             //Channels are numbered starting at 0
             if (LMS_EnableChannel(device, LMS_CH_RX, 0, true) != 0)
-                error("Alio");
+                error("RX Channel could not be enabled", device);
 
             //Set center frequency
-            if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, Settings_In.Center_Freq) != 0)
-                error("Alio");
+            if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, centerFreq) != 0)
+                error("Center Frequency could not be set", device);
 
             //Set sample rate, ask to use 2x oversampling in RF
             //This sets sampling rate for all channels
-            if (LMS_SetSampleRate(device, Settings_In.Sample_Rate, 1) != 0)
-                error("Alio");
+            if (LMS_SetSampleRate(device, sampleRate, 0) != 0)
+                error("Sample rate could not be set", device);
 
             //Set Lowpass Filter Bandwidth
-            LMS_SetLPFBW(device, LMS_CH_RX, 0, Settings_In.Sample_Rate*2);
+            LMS_SetLPFBW(device, LMS_CH_RX, 0, sampleRate*2);
 
-            LMS_SetGaindB(device, LMS_CH_RX, 0, Settings_In.Gain);
+            if(LMS_SetGaindB(device, LMS_CH_RX, 0, gain)!=0)
+                error("Gain could not be set", device);
+
+            return 1;
         };
-        void Setup_Stream()
+
+        void Change_RF_Settings(float_type centerFreq = 0, float_type sampleRate = 0, unsigned gain = 100)
+        {
+            if(centerFreq != 0)
+            {
+                //Set center frequency
+                if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, centerFreq) != 0)
+                    error("Center Frequency could not be set", device);
+            }
+            if(sampleRate != 0)
+            {
+                //Set sample rate, ask to use 2x oversampling in RF
+                //This sets sampling rate for all channels
+                if (LMS_SetSampleRate(device, sampleRate, 0) != 0)
+                    error("Sample rate could not be set", device);
+            }
+            if(gain != 100)
+            {
+                if(LMS_SetGaindB(device, LMS_CH_RX, 0, gain)!=0)
+                    error("Gain could not be set", device);
+            }
+        };
+
+        int Setup_Stream()
         {
             streamId.channel = 0;               //channel number
             streamId.fifoSize = 1024 * 1024;    //fifo size in samples
@@ -87,7 +110,9 @@ class Lime_SDR_mini_Rx
 
             //Setup Stream
             if (LMS_SetupStream(device, &streamId) != 0)
-                error("Alio");
+                error("Stream could not be set up", device);
+
+            return 1;
         };
         void Start_Stream()
         {
@@ -103,62 +128,24 @@ class Lime_SDR_mini_Rx
         {
             LMS_DestroyStream(device, &streamId);
         };
-        ~Lime_SDR_mini_Rx()
-        {
-            LMS_Close(device);
-        };
-};
 
-class Disp_Meas_Settings
-{
-    protected:
-        float_type Disp_CenterFreq;
-        float_type Disp_ResBw;
-        float_type Sweep_Time;
-        double Gain;
-        double LPBWF_BW;
-        double Ref_Amp;
-        float_type Center_Freq;
-        float_type Sample_Rate;
-
-    public:
-        Disp_Meas_Settings(float_type Center_Freq_In, float_type Sample_Rate_In, double Gain_In, double LPBWF_BW_In, double Ref_Amp_In)
-        {
-            Center_Freq = Center_Freq_In - Sample_Rate_In/4;
-            Sample_Rate = Sample_Rate_In;
-            Gain = Gain_In;
-            LPBWF_BW = LPBWF_BW_In;
-            Ref_Amp = Ref_Amp_In;
-        }
-
-        void Change_RF_Settings(float_type Center_Freq_In, float_type Sample_Rate_In)
-        {
-            Center_Freq = Center_Freq_In - Sample_Rate_In/4;
-            Sample_Rate = Sample_Rate_In;
-        }
-
-        Disp_Meas_Settings();
 };
 
 class FFT_Settings
 {
-    protected:
-        int DFTlength;
-        double *PSD_1Hz;
-        double *FREQ;
-        double *tempArr;
-        fftw_complex *in;
-        fftw_complex *out;
+    private:
         fftw_plan p;
 
     public:
-        FFT_Settings(int DFTlengthIn, double gainIn)
+        int DFTlength;
+        fftw_complex *in;
+        fftw_complex *out;
+
+        FFT_Settings(int DFTlengthIn)
         {
             DFTlength = DFTlengthIn;
-            PSD_1Hz = new double [DFTlength/2];
-            FREQ = new double [DFTlength/2];
-            in = new fftw_complex [DFTlength];
-            out = new fftw_complex [DFTlength];
+            in = (fftw_complex*) fftw_malloc(DFTlength * sizeof(fftw_complex));
+            out = (fftw_complex*) fftw_malloc(DFTlength * sizeof(fftw_complex));
             p = fftw_plan_dft_1d(DFTlength, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
         };
         void Execute_FFTW()
@@ -168,168 +155,194 @@ class FFT_Settings
         void Change_FFT_Settings(int DFTlengthIn)
         {
             //Free old memory
-            free(PSD_1Hz);
-            free(FREQ);
             fftw_free(in);
             fftw_free(out);
             fftw_destroy_plan(p);
 
             // Set new values
             DFTlength = DFTlengthIn;
-            PSD_1Hz = new double [DFTlength/2];
-            FREQ = new double [DFTlength/2];
-            in = new fftw_complex [DFTlength];
-            out = new fftw_complex [DFTlength];
+            in = (fftw_complex*) fftw_malloc(DFTlength * sizeof(fftw_complex));
+            out = (fftw_complex*) fftw_malloc(DFTlength * sizeof(fftw_complex));
             p = fftw_plan_dft_1d(DFTlength, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
         };
 
 
         ~FFT_Settings()
         {
-            free(PSD_1Hz);
-            free(FREQ);
+            fftw_destroy_plan(p);
             fftw_free(in);
             fftw_free(out);
-            fftw_destroy_plan(p);
         };
 };
 
-/*
-int loadConfig()
-{
-    FILE *fid;
-    fid = fopen("config.csv", "r");
 
-    if(fid == NULL)
+class Trace
+{
+    public:
+    Trace(float_type centerFreqIn, float_type dispSpanIn,  float_type resBWIn, double gainIn, double refAmpIn, int FFTIn, unsigned TraceNum)
     {
-        error("config file not found");
-    }
-    else
+        Display.centerFreq = centerFreqIn;
+        Display.span = dispSpanIn;
+        Display.resBW = resBWIn;
+        Display.refAmp = refAmpIn;
+        SDRSetting.sampleRate = resBWIn*2;
+        SDRSetting.frameTime = 1/SDRSetting.sampleRate*FFTIn;
+        SDRSetting.centerFreq = centerFreqIn - dispSpanIn / 2;
+        SDRSetting.gain = gainIn;
+        FFT.Change_FFT_Settings(FFTIn);
+        YAxisBuffer = new double [int(ceil(FFTIn/2*(Display.span/Display.resBW)))];
+        XAxisBuffer = new double [int(ceil(FFTIn/2*(Display.span/Display.resBW)))];
+        for(int x=0; x<(int)(ceil(FFTIn/2*(Display.span/Display.resBW))); x++)
+            YAxisBuffer[x] = 0;
+        for(int x=0; x<int(ceil(FFTIn/2*(Display.span/Display.resBW))); x++)
+            XAxisBuffer[x] = SDRSetting.centerFreq + (SDRSetting.sampleRate / FFT.DFTlength)*x;
+        StreamBuffer = new int16_t[FFT.DFTlength * 2];
+        SDR.Setup_SDR(SDRSetting.centerFreq, SDRSetting.sampleRate, SDRSetting.gain);
+    };
+
+    ~Trace()
     {
-        fclose(fid);
-        CsvParser *csvparser = CsvParser_new("config.csv", ",", 0);
-        CsvRow *row;
-        while ((row = CsvParser_getRow(csvparser)) )
+        free(YAxisBuffer);
+        free(XAxisBuffer);
+        free(StreamBuffer);
+    };
+
+    void Aqcuire_Sweep()
+    {
+        FILE* plotFile;
+        //gnuplotHandle2 = Gnuplot("lines");
+        int FFTLength = getFFTLength();
+        SDR.Setup_Stream();
+        SDR.Start_Stream();
+
+        // debug
+        int b = FFTLength/2*ceil(Display.span/Display.resBW);
+
+        for(int z = 0; z<(int)ceil(Display.span/Display.resBW); z++)
         {
-            printf("NEW LINE:\n");
-            const char **rowFields = CsvParser_getFields(row);
-            for (int i = 0 ; i < CsvParser_getNumFields(row) ; i++) {
-                printf("FIELD: %s\n", rowFields[i]);
+
+            int samplesRead = LMS_RecvStream(&SDR.streamId, StreamBuffer, FFTLength, NULL, 3000);
+            usleep(SDRSetting.frameTime*10e6);
+
+            for(int x=0; x<samplesRead; x+=2)
+            {
+                FFT.in[x/2][0]= StreamBuffer[x];
+                FFT.in[x/2][1] = StreamBuffer[x+1];
             }
-            CsvParser_destroy_row(row);
+
+            FFT.Execute_FFTW();
+
+            for(int y=0; y<FFTLength/2; y++)
+            {
+                YAxisBuffer[z*FFTLength/2+y] = 10*log10(pow(0.000195313 * pow(FFT.out[y][0]*FFT.out[y][0]+FFT.out[y][1]*FFT.out[y][1], 0.5)/FFTLength, 2)/50/0.001);
+                XAxisBuffer[z*FFTLength/2+y] = SDRSetting.centerFreq + (SDRSetting.sampleRate / FFTLength)*y;
+            }
+
+            plotFile = fopen("plotFile.txt", "w+");
+            for(int x=0; x<(int)ceil(Display.span/Display.resBW)*FFTLength/2; x++)
+            {
+                fprintf(plotFile, "%f   %f\n", XAxisBuffer[x], YAxisBuffer[x]);
+            }
+            fclose(plotFile);
+            gnuplotHandle.plotfile_xy("plotFile.txt", 1, 2, "Spectrum");
+
+            //clear last plot before making a new one
+            gnuplotHandle.reset_plot();
+
+            Change_RF_Settings(SDRSetting.centerFreq+SDRSetting.sampleRate/2 + SDRSetting.sampleRate/4);
         }
-        CsvParser_destroy(csvparser);
-        return 0;
-    }
+    };
+
+    private:
+
+        struct DispSettings
+        {
+            float_type centerFreq;
+            float_type resBW;
+            float_type span;
+            double refAmp;
+        };
+
+        struct SDRSettings
+        {
+            unsigned gain;
+            float_type centerFreq;
+            float_type sampleRate;
+            float_type frameTime;
+        };
+
+        struct PlotSettings
+        {
+            float_type refAmp;
+            FILE* plotFile;
+            char* fileName;
+        };
+
+        SDRSettings SDRSetting;
+        DispSettings Display;
+        int16_t *StreamBuffer;
+        double *YAxisBuffer;
+        double *XAxisBuffer;
+        Gnuplot gnuplotHandle = Gnuplot("lines");
+        FFT_Settings FFT = FFT_Settings(8192);
+        Lime_SDR_mini_Rx SDR = Lime_SDR_mini_Rx();
+
+        int getFFTLength()
+        {
+            return FFT.DFTlength;
+        }
+
+        void Change_RF_Settings(float_type centerFreqIn = 0, float_type sampleRateIn = 0, unsigned gainIn = 100, int FFTIn = 0)
+        {
+            if(centerFreqIn != 0)
+            {
+                // change this to respect cases when centerFreq and sampleRate shall be changed
+                SDRSetting.centerFreq = centerFreqIn - SDRSetting.sampleRate/4;
+                SDR.Change_RF_Settings(SDRSetting.centerFreq);
+            }
+            if(sampleRateIn != 0)
+            {
+                SDRSetting.sampleRate = sampleRateIn;
+                SDR.Change_RF_Settings(0,SDRSetting.sampleRate);
+            }
+            if(gainIn != 0)
+            {
+                SDRSetting.gain = gainIn;
+                SDR.Change_RF_Settings(0,0,SDRSetting.gain);
+            }
+            if(FFTIn != 0)
+            {
+                FFT.Change_FFT_Settings(FFTIn);
+            }
+        }
+};
+
+int error(char *string, lms_device_t* device)
+{
+    printf("--------------------------------------------------\n"
+           "Error: %s\n"
+           "--------------------------------------------------", string);
+    if (device != NULL)
+        LMS_Close(device);
+    exit(-1);
 }
-*/
 
 
 //Main Function
 int main(int argc, char** argv)
 {
     //Initialize variables to be used later on
-    gnuplot_ctrl *gnuplotHandle;
-    int DFTlength = 8192;           //DFT Length
-    float_type centerFreq = 433.9e6;  //Center Frequency
-    fftw_complex in[DFTlength];     //Input to fftw
-    fftw_complex out[DFTlength];    //Output of fftw
-    float_type sampleRate = 1e6;    //Bandwidth
-    centerFreq = centerFreq - sampleRate/4;
-    double PSD_1Hz[DFTlength/2];          //Array for saving power values
-    double FREQ[DFTlength/2];         //Array for frequency power values
-    double tempArr[DFTlength/2];
+    float_type CenterFreq = 940e6;
+    float_type sample = 10e6;
 
-    //Setup Stream
-    if (LMS_SetupStream(device, &streamId) != 0)
-        error("Alio");
+    Trace Trace1 = Trace(CenterFreq, sample*6, sample, 20, -15, 1024, 1);
 
-    //Initialize data buffers
-    const int sampleCnt = DFTlength; //complex samples per buffer
-    int16_t buffer[sampleCnt * 2]; //buffer to hold complex values (2*samples))
+    //gnuplotHandle.set_yrange(-150, -5);
 
-    //Start streaming
-    LMS_StartStream(&streamId);
-
-    //Set this variable to 1 to break out of while loop
-    int breakLoop=0;
-
-    //Initialize gnuplot
-    gnuplotHandle = gnuplot_init();
-    gnuplot_setstyle(gnuplotHandle, "lines");
-    gnuplot_cmd(gnuplotHandle, "set yrange [%i:%f]", -150, -30);
-
-    //Get current chip temperature
-    LMS_GetChipTemperature(device, 0, tempe);
-
-    //Repeat loop as long as chip temperature remains lower than 55°C and break condition is set to 0
-    while(*tempe < 55 && breakLoop==0)
-    {
-        //Get current chip temperature
-        LMS_GetChipTemperature(device, 0, tempe);
-
-        //Receive samples and store number of samples
-        int samplesRead = LMS_RecvStream(&streamId, buffer, sampleCnt, NULL, 1000);
-        //I and Q samples are interleaved in buffer: IQIQIQ...
-
-        //Store In-Phase values into in[x][0]
-        //Store Quadrature values into in[x][1]
-        for(int x=0; x<sampleCnt*2; x+=2)
-        {
-            in[x/2][0]= buffer[x];
-            in[x/2][1] = buffer[x+1];
-        }
-
-        //Execute FFT
-        fftw_execute(p);
-
-        // Calculate bin width and start frequency
-        double binWidth = sampleRate/DFTlength;
-        double binStart = centerFreq;
-
-        //calculate Power per Hz from FFT --> First calculate Amplitude, then Power (50 Ohm System)
-        for (int y=0; y<DFTlength/2; y++)
-        {
-            PSD_1Hz[y] = 10*log10(pow(0.000195313 * pow(out[y][0]*out[y][0]+out[y][1]*out[y][1], 0.5)/DFTlength*2, 2)/50/0.001); // Try to resemble x * 0.000000429153V/Hz here
-            tempArr[y] = PSD_1Hz[y];
-            // Shift Array
-        }
-
-        //calculate frequency positions after DFT
-        for(int y = 0; y<DFTlength/2; y++)
-        {
-            FREQ[y] = binStart + y*binWidth;
-        }
-
-        //plot spectrum
-        gnuplot_plot_xy(gnuplotHandle, FREQ, PSD_1Hz, DFTlength/2, "Spec");
-
-        //delay in order to avoid overload of gnuplot
-        for(int c = 0; c<5000; c++)
-        {
-            for(int d = 0; d<5000; d++)
-            {
-            }
-        }
-
-        //clear last plot before making a new one
-        gnuplot_resetplot(gnuplotHandle);
-    }
+    Trace1.Aqcuire_Sweep();
 
 
-    //Stop streaming
-    LMS_StopStream(&streamId); //stream is stopped but can be started again with LMS_StartStream()
-    LMS_DestroyStream(device, &streamId); //stream is deallocated and can no longer be used
-
-    //Close device
-    LMS_Close(device);
-
-    //free allocated memory
-    free(gnuplotHandle);
-    free(tempe);
-    free(gainPtr);
-    fftw_destroy_plan(p);
-
+    int x = 0;
 
     return 0;
 }
