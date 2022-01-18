@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 4.13.2, 2021-07-12T18:51:10. -->
+<!-- Written by QtCreator 4.13.2, 2022-01-16T21:16:42. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -323,8 +323,9 @@
     <valuelist type="QVariantList" key="CustomOutputParsers"/>
     <value type="int" key="PE.EnvironmentAspect.Base">2</value>
     <valuelist type="QVariantList" key="PE.EnvironmentAspect.Changes"/>
-    <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">Qt4ProjectManager.Qt4RunConfiguration:/home/ungare/QtProjects/Spectrum_Analyzer_OOP_Modular/Spectrum_Analyzer_OOP_Modular.pro</value>
-    <value type="QString" key="ProjectExplorer.RunConfiguration.BuildKey">/home/ungare/QtProjects/Spectrum_Analyzer_OOP_Modular/Spectrum_Analyzer_OOP_Modular.pro</value>
+    <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">Spectrum_Analyzer_OOP_Modular2</value>
+    <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">Qt4ProjectManager.Qt4RunConfiguration:/home/ungare/QtProjects/Lime-SDR-Spectrum-Analyzer_C++_OOP/Spectrum_Analyzer_OOP_Modular.pro</value>
+    <value type="QString" key="ProjectExplorer.RunConfiguration.BuildKey">/home/ungare/QtProjects/Lime-SDR-Spectrum-Analyzer_C++_OOP/Spectrum_Analyzer_OOP_Modular.pro</value>
     <value type="QString" key="RunConfiguration.Arguments"></value>
     <value type="bool" key="RunConfiguration.Arguments.multi">false</value>
     <value type="QString" key="RunConfiguration.OverrideDebuggerStartup"></value>
