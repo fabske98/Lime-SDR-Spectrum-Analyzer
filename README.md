@@ -57,7 +57,7 @@ unsigned nTrace = 1;
 
 Trace Trace1 = Trace(centerFreq, span, sample, gain, refAmp, FFTlength, averaging, nTrace);
 
-myTrace.Aqcuire_Sweep();
+Trace.Aqcuire_Sweep();
 
 ```
 
