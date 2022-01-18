@@ -46,7 +46,17 @@ pip install foobar
 #include limesuitelimesuite.h
 #include gnuplot_i.h
 
-Trace myTrace();
+float_type centerFreq = 965e6;
+float_type span = 40e6;
+float_type sample = 10e6;
+double gain = 25;
+double refAmp = -15;
+int FFTlength = 1024;
+int averaging = 30;
+unsigned nTrace = 1;
+
+Trace Trace1 = Trace(centerFreq, span, sample, gain, refAmp, FFTlength, averaging, nTrace);
+
 myTrace.Aqcuire_Sweep();
 
 ```
