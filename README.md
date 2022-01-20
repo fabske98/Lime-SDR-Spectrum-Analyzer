@@ -35,10 +35,7 @@ The following external libraries  sources are used for this project and are requ
 - gnuplot_i (Plotting) (sourcefile and header already include in this repo)
 - fftw3 (Fast-Fourier-Transformation) [Link](httpfftw.org)
 
-```bash
-pip install foobar
-```
-
+- Run and modify the code in Lime_SDR_Spectrum_Analyzer.cpp to your liking
 ## Usage
 
 ```cpp
