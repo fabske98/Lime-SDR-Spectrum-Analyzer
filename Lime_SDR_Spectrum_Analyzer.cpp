@@ -259,8 +259,13 @@ class FFT_Settings
 //**************************************************************************************
 //#Class:       FFT_Settings
 //**************************************************************************************
-//#Description: This class manages the Fast Fourier Transformations. The FFT Length is
-//              only changeable through this class
+//#Description: Each object of this class manages an own Trace window. The classes FFT_
+// Settings and Lime_SDR_mini_Rx are "helper" classes for this class. The user specifies
+// the desired Spectrum Analyzer settings in the Constructor of this class. The class
+// then takes care of setting the required RF Settings in the SDR and preparing the FFT
+// Transformation.
+//
+// Using the method "Aqcuire_Sweep", the spectrum plot will be initiated.
 //**************************************************************************************
 //#Members:     Public
 //#Functions
@@ -288,7 +293,7 @@ class FFT_Settings
 //              <SDR>                   :<Lime_SDR_mini_Rx> Lime_SDR_mini_Rx object
 //              <AveragingCounter>      :<int> counter to track saved frames for
 //                                       averaging
-//              <AveragingCounter>      :<bool> flag indicating that first averaging
+//              <initAveraging>         :<bool> flag indicating that first averaging
 //                                       cycle has finished
 //#Functions
 //              <getFFTLength>          :returns current FFT length
