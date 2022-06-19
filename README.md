@@ -5,7 +5,7 @@ A user configurable Spectrum Analyzer Application featuring a frequency range fr
 See an example spectrum Center Frequency: 960 MHz, Span: 40MHz, Resolution Bandwidth: 10 MHz, Clear Write 
 ![Spectrum](https://github.com/fabske98/Lime-SDR-Spectrum-Analyzer/blob/C%2B%2B_OOP_Modular/images/Snapshot_No_Averaging.png)
 
-See an example spectrum Center Frequency: 960 MHz, Span: 40MHz, Resolution Bandwidth: 10 MHz, Averaging Factor 30
+See an example spectrum Center Frequency: 960 MHz, Span: 40MHz, Resolution Bandwidth: 10 MHz, Averaging Factor 30, Channel Bandwidth Measurement with 20 MHz BW and Marker placed
 ![Spectrum](https://github.com/fabske98/Lime-SDR-Spectrum-Analyzer/blob/C%2B%2B_OOP_Modular/images/Snapshot_Averaging_30.png)
 
 See the hardware setup
@@ -16,14 +16,14 @@ This project is still under development. Current features include
 - Setting the following common Spectrum Analyzer settings upon creating a trace Center Frequency, Span, Resolution Bandwidth, Gain, Reference Amplitude and Trace averaging.
 - Plotting the Spectrum (using Gnuplot)
 - Creating an own trace for each LimeSDRmini connected
+- Setting up to 3 markers in the plot
+- Performing a Channel Power Measurement
 
 The following topics are to be tackled soon
 
 - Remove the DC bias and center spike (caused by the SDR) from the spectrum
 - Changing of Spectrum Analyzer settings on the fly (right now the created Trace object needs to be destroyed and a new to be created)
 - Use the (internal) second Rx channel for frequencies greater than 2 GHz
-- User defineable and automatically (e.g. max) set markers in the plot
-- Channel power measurements
 - A GUI with a similar user interface as one is accustomed to from spectrum analyzers
 - Release as ver. 1.0 standalone application once the topics above are implemented
 
@@ -31,9 +31,10 @@ The following topics are to be tackled soon
 
 The following external libraries  sources are used for this project and are required for using the code published in this repository
 
-- limesuite (SDR driver) [Link](httpsgithub.commyriadrfLimeSuite)
-- gnuplot_i (Plotting) (sourcefile and header already include in this repo)
-- fftw3 (Fast-Fourier-Transformation) [Link](httpfftw.org)
+- limesuite (SDR driver) [Link](https://github.com/myriadrf/LimeSuite)
+- gnuplot_i (Plotting API) (sourcefile and header already include in this repo)
+- Gnuplot [Link](https://sourceforge.net/projects/gnuplot/files/gnuplot/) (Version 5.4.3 is tested and working)
+- fftw3 (Fast-Fourier-Transformation) [Link](http://fftw.org)
 
 - Run and modify the code in Lime_SDR_Spectrum_Analyzer.cpp to your liking
 ## Usage
